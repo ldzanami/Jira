@@ -1,9 +1,7 @@
-﻿using Jira.Data;
-using Jira.DTOs;
+﻿using Jira.DTOs;
 using Jira.Models.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -16,7 +14,7 @@ namespace Jira.Controllers
     public class AuthController(UserManager<User> userManager, IConfiguration configuration) : ControllerBase
     {
         private readonly UserManager<User> _userManager = userManager;
-        private readonly IConfiguration _configuration = configuration;
+        private readonly IConfiguration? _configuration = configuration;
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
@@ -48,10 +46,10 @@ namespace Jira.Controllers
             var claims = new List<Claim>
             {
                 new(JwtRegisteredClaimNames.Sub, user.Id),
-                new(JwtRegisteredClaimNames.Name, user.UserName),
-                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new(JwtRegisteredClaimNames.Name, user.UserName!),
+                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new(ClaimTypes.Role, user.Role)
             }.Union(userClaims);
-
             var jwtSettings = _configuration.GetSection("Jwt");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
