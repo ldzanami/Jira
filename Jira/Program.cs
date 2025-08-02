@@ -110,6 +110,7 @@ namespace Jira
                 var roleService = scope.ServiceProvider.GetRequiredService<RoleService>();
                 roleService.CreateRoleIfNotExists("Admin").Wait(); // Асинхронный вызов с Wait()
                 roleService.CreateRoleIfNotExists("User").Wait(); // Асинхронный вызов с Wait()
+                roleService.CreateRoleIfNotExists("Manager").Wait(); // Асинхронный вызов с Wait()
             }
 
             // 7. Маппинг контроллеров (после всех middleware)

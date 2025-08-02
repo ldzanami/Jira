@@ -18,7 +18,7 @@ namespace Jira.Controllers
         [HttpGet("getProjectMaster")]
         public async Task<IActionResult> GetMaster([FromQuery] string id)
         {
-            return Ok((await Context.Projects.Where(proj => proj.ProjectMasterId == id).Include(u => u.ProjectMaster).ToListAsync()).FirstOrDefault()?.ProjectMaster);
+            return Ok((await Context.Projects.Where(proj => proj.Id == id).Include(u => u.Owner).ToListAsync()).FirstOrDefault()?.Owner);
         }
     }
 }

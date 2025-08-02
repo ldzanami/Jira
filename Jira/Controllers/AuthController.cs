@@ -1,4 +1,4 @@
-﻿using Jira.DTOs;
+﻿using Jira.DTOs.Auth;
 using Jira.Models.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -11,9 +11,10 @@ namespace Jira.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class AuthController(UserManager<User> userManager, IConfiguration configuration) : ControllerBase
+    public class AuthController(UserManager<User> userManager, IConfiguration configuration, SignInManager<User> signInManager) : ControllerBase
     {
         private readonly UserManager<User> _userManager = userManager;
+        private readonly SignInManager<User> _signInManager = signInManager;
         private readonly IConfiguration? _configuration = configuration;
 
         [HttpPost("register")]
@@ -38,16 +39,14 @@ namespace Jira.Controllers
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
             var user = await _userManager.FindByNameAsync(dto.Login);
-            if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password))
-            {
-                return Unauthorized("Invalid Login or Password");
-            }
+            if (user == null) return Unauthorized();
+            var result = await _signInManager.CheckPasswordSignInAsync(user, dto.Password, false);
+            if (!result.Succeeded) return Unauthorized();
             var userClaims = await _userManager.GetClaimsAsync(user);
             var claims = new List<Claim>
             {
                 new(JwtRegisteredClaimNames.Sub, user.Id),
                 new(JwtRegisteredClaimNames.Name, user.UserName!),
-                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new(ClaimTypes.Role, user.Role)
             }.Union(userClaims);
             var jwtSettings = _configuration.GetSection("Jwt");
