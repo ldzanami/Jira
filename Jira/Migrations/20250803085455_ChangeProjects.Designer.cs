@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Jira.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jira.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250803085455_ChangeProjects")]
+    partial class ChangeProjects
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -437,7 +440,7 @@ namespace Jira.Migrations
             modelBuilder.Entity("Jira.Models.Entities.Board", b =>
                 {
                     b.HasOne("Jira.Models.Entities.Project", "Project")
-                        .WithMany()
+                        .WithMany("Boards")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -508,7 +511,7 @@ namespace Jira.Migrations
             modelBuilder.Entity("Jira.Models.Entities.ProjectMember", b =>
                 {
                     b.HasOne("Jira.Models.Entities.Project", "Project")
-                        .WithMany()
+                        .WithMany("ProjectMembers")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -595,6 +598,13 @@ namespace Jira.Migrations
             modelBuilder.Entity("Jira.Models.Entities.Column", b =>
                 {
                     b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("Jira.Models.Entities.Project", b =>
+                {
+                    b.Navigation("Boards");
+
+                    b.Navigation("ProjectMembers");
                 });
 
             modelBuilder.Entity("Jira.Models.Entities.TaskItem", b =>

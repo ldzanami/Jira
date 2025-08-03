@@ -1,6 +1,7 @@
 ﻿using Jira.Data;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 
 namespace Jira.Models.Entities
 {
@@ -13,10 +14,21 @@ namespace Jira.Models.Entities
         public required string OwnerId { get; set; }
         public User? Owner { get; set; }
         public required DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public required List<ProjectMember> ProjectMembers { get; set; } = [];
-        public required List<Board> Boards { get; set; } = [];
+        public DateTime? UpdatedAt { get; set; }
 
-        public async Task<List<ProjectMember>> GetProjectMembersAsync(AppDbContext dbContext) => await dbContext.ProjectMembers.Where(member => member.ProjectId == Id).ToListAsync();
-        public async Task<List<Board>> GetBoardsAsync(AppDbContext dbContext) => await dbContext.Boards.Where(board => board.ProjectId == Id).ToListAsync();
+        public List<ProjectMember> GetProjectMembers(AppDbContext dbContext) => dbContext.ProjectMembers.Where(member => member.ProjectId == Id)
+                                                                                                        .Include(member => member.Project)
+                                                                                                        .Include(member => member.User)
+                                                                                                        .ToList();
+
+        public List<Board> GetBoards(AppDbContext dbContext) => dbContext.Boards.Where(board => board.ProjectId == Id)
+                                                                                .Include(board => board.Project)
+                                                                                .ToList();
+
+        public bool IsMember(ClaimsPrincipal user, AppDbContext appDbContext)
+        {
+            var members = GetProjectMembers(appDbContext);
+            return members.Any(member => member.User.UserName == user.Identity.Name);
+        }
     }
 }
