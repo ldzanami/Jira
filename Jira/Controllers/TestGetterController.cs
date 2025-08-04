@@ -10,7 +10,7 @@ namespace Jira.Controllers
     [Route("api/[controller]")]
     public class TestGetterController(AppDbContext context) : ControllerBase
     {
-        public AppDbContext Context { get; set; } = context;
+        private AppDbContext Context { get; init; } = context;
 
         [HttpGet("get")]
         public IActionResult Get() => Ok();

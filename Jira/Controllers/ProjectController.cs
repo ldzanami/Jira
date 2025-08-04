@@ -14,8 +14,8 @@ namespace Jira.Controllers
     [Route("api/[controller]")]
     public class ProjectController(AppDbContext appDbContext, SignInManager<User> signInManager) : ControllerBase
     {
-        private AppDbContext AppDbContext { get; set; } = appDbContext;
-        private SignInManager<User> SignInManager { get; set; } = signInManager;
+        private AppDbContext AppDbContext { get; init; } = appDbContext;
+        private SignInManager<User> SignInManager { get; init; } = signInManager;
              
         [HttpPost]
         public async Task<IActionResult> CreateProject([FromBody] CreateDto createDto)
@@ -29,7 +29,7 @@ namespace Jira.Controllers
                 Id = Guid.NewGuid().ToString(),
                 Name = createDto.Name,
                 Description = createDto.Description,
-                OwnerId = SignInManager.UserManager.GetUserId(User),
+                OwnerId = (await SignInManager.UserManager.FindByNameAsync(User.Identity.Name)).Id,
                 CreatedAt = DateTime.UtcNow
             };
             await AppDbContext.ProjectMembers.AddAsync(new ProjectMember() { ProjectId = project.Id, UserId = project.OwnerId, Role = "Owner"});
@@ -41,8 +41,8 @@ namespace Jira.Controllers
                 Description = project.Description,
                 Name = project.Name,
                 CreatedAt = project.CreatedAt,
-                OwnerId = SignInManager.UserManager.GetUserId(User),
-                OwnerName = SignInManager.UserManager.GetUserName(User)
+                OwnerId = (await SignInManager.UserManager.FindByNameAsync(User.Identity.Name)).Id,
+                OwnerName = User.Identity.Name
             });
         }
 
@@ -113,16 +113,20 @@ namespace Jira.Controllers
                 return Forbid();
             }
             if (AppDbContext.Projects.Where(proj => proj.Name == dto.Name).Any()) return BadRequest(new {Error = "Проект с таким именем уже есть"});
-            project.Name = dto.Name;
-            project.Description = dto.Description;
+            if (dto.Name != null)
+            {
+                project.Name = dto.Name;
+            }
+            if (dto.Description != null)
+            {
+                project.Description = dto.Description;
+            }
             project.UpdatedAt = DateTime.UtcNow;
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
-            AppDbContext.Projects.Remove(await AppDbContext.Projects.FindAsync(id));
-            await AppDbContext.SaveChangesAsync();
-            await AppDbContext.Projects.AddAsync(project);
+            AppDbContext.Projects.Update(project);
             await AppDbContext.SaveChangesAsync();
             return NoContent();
         }
