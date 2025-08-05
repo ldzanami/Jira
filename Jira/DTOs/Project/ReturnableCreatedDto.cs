@@ -10,13 +10,13 @@ namespace Jira.DTOs.Project
         public required string OwnerName { get; set; }
         public required DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
-        public static explicit operator ReturnableCreatedDto(Jira.Models.Entities.Project project) => new() { Id = project.Id,
-                                                                                                              Name = project.Name,
-                                                                                                              Description = project.Description,
-                                                                                                              OwnerId = project.OwnerId,
-                                                                                                              OwnerName = project.Owner.UserName,
-                                                                                                              CreatedAt = project.CreatedAt,
-                                                                                                              UpdatedAt = project.UpdatedAt
-                                                                                                             };
+        public static explicit operator ReturnableCreatedDto(Models.Entities.Project project) => new() { Id = project.Id,
+                                                                                                         Name = project.Name,
+                                                                                                         Description = project.Description,
+                                                                                                         OwnerId = project.OwnerId,
+                                                                                                         OwnerName = project.Owner.UserName,
+                                                                                                         CreatedAt = project.CreatedAt,
+                                                                                                         UpdatedAt = project.UpdatedAt
+                                                                                                         };
     }
 }

@@ -53,18 +53,22 @@ namespace Jira.Controllers
             {
                 return NotFound();
             }
-            return Ok(await AppDbContext.ProjectMembers.Where(member => member.ProjectId == id)
-                                                       .Include(member => member.Project)
-                                                       .Include(member => member.User)
-                                                       .Select(member => new GetMemberDto()
-                                                       {
-                                                           UserId = member.UserId,
-                                                           ProjectId = member.ProjectId,
-                                                           UserName = member.User.UserName,
-                                                           ProjectName = member.Project.Name,
-                                                           Role = member.Role
-                                                       })
-                                                       .ToListAsync());
+            return Ok(await AppDbContext.Projects.Include(proj => proj.ProjectMembers)
+                                                 .ThenInclude(member => member.User)
+                                                 .Select(proj => new GetProjectWithMembersDto
+                                                 {
+                                                     Id = proj.Id,
+                                                     Name = proj.Name,
+                                                     Description = proj.Description,
+                                                     ProjectMembers = proj.ProjectMembers.Select(member => new GetMemberDto
+                                                     {
+                                                         UserId = member.UserId,
+                                                         UserName = member.User.UserName,
+                                                         Role = member.Role
+
+                                                     }).ToList()
+                                                 })
+                                                 .FirstOrDefaultAsync(proj => proj.Id == id));
         }
 
         [HttpGet("{id}")]
@@ -81,23 +85,24 @@ namespace Jira.Controllers
         [HttpGet("my")]
         public async Task<IActionResult> GetAllMyProjects()
         {
-            var projectOwner = await AppDbContext.Projects.Where(project => project.Owner.UserName == User.Identity.Name)
-                                                          .Include(proj => proj.Owner)
-                                                          .ToListAsync();
-
-            var projectMember = await AppDbContext.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name && member.Project.Owner.UserName != User.Identity.Name)
-                                                                 .Include(member => member.User)
-                                                                 .Include(member => member.Project)
-                                                                 .Include(member => member.Project.Owner)
-                                                                 .Select(member => member.Project)
-                                                                 .ToListAsync();
-
-            projectMember.AddRange(projectOwner);
-            if(projectMember.Count == 0)
+            var myProjects = await AppDbContext.ProjectMembers.Include(member => member.Project)
+                                                        .Include(member => member.User)
+                                                        .Where(member => member.User.UserName == User.Identity.Name)
+                                                        .Select(member => new GetProjectsDto
+                                                        {
+                                                            Id = member.ProjectId,
+                                                            Name = member.Project.Name,
+                                                            Description = member.Project.Description,
+                                                            OwnerId = member.Project.OwnerId,
+                                                            OwnerName = member.Project.Owner.UserName,
+                                                            CreatedAt = member.Project.CreatedAt,
+                                                            UpdatedAt = member.Project.UpdatedAt
+                                                        }).ToListAsync();
+            if(myProjects.Count == 0)
             {
                 return NotFound();
             }
-            return Ok(from project in projectMember select (ReturnableCreatedDto)project);
+            return Ok(myProjects);
         }
 
         [HttpPatch("{id}")]
@@ -153,7 +158,7 @@ namespace Jira.Controllers
             {
                 return Forbid();
             }
-            var projectMember = await AppDbContext.ProjectMembers.Where(member => member.UserId == dto.Id && member.ProjectId == id || member.Project.OwnerId == dto.Id).Include(member => member.Project).ToListAsync();
+            var projectMember = await AppDbContext.ProjectMembers.Where(member => member.UserId == dto.Id && member.ProjectId == id).Include(member => member.Project).ToListAsync();
             if (projectMember.Count != 0)
             {
                 return BadRequest(new { Error = "Пользователь уже находится в этом проекте" });

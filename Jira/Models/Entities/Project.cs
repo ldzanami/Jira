@@ -15,20 +15,7 @@ namespace Jira.Models.Entities
         public User? Owner { get; set; }
         public required DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
-
-        public List<ProjectMember> GetProjectMembers(AppDbContext dbContext) => dbContext.ProjectMembers.Where(member => member.ProjectId == Id)
-                                                                                                        .Include(member => member.Project)
-                                                                                                        .Include(member => member.User)
-                                                                                                        .ToList();
-
-        public List<Board> GetBoards(AppDbContext dbContext) => dbContext.Boards.Where(board => board.ProjectId == Id)
-                                                                                .Include(board => board.Project)
-                                                                                .ToList();
-
-        public bool IsMember(ClaimsPrincipal user, AppDbContext appDbContext)
-        {
-            var members = GetProjectMembers(appDbContext);
-            return members.Any(member => member.User.UserName == user.Identity.Name);
-        }
+        public List<ProjectMember> ProjectMembers { get; set; } = [];
+        public List<Board> Boards { get; set; } = [];
     }
 }

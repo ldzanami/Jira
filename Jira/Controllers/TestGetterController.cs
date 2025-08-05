@@ -20,5 +20,19 @@ namespace Jira.Controllers
         {
             return Ok((await Context.Projects.Where(proj => proj.Id == id).Include(u => u.Owner).ToListAsync()).FirstOrDefault()?.Owner);
         }
+
+        [HttpGet("{id}/members")]
+        public async Task<IActionResult> GetMembers([FromRoute] string id) => Ok(await Context.Projects.Include(proj => proj.ProjectMembers)
+                                                                                                       .ThenInclude(memer => memer.User)
+                                                                                                       .Select(proj => new {
+                                                                                                           proj.Id,
+                                                                                                           proj.Name,
+                                                                                                           Members = proj.ProjectMembers.Select(member => new
+                                                                                                           {
+                                                                                                               member.UserId,
+                                                                                                               member.User.UserName,
+                                                                                                               member.Role
+                                                                                                           })
+                                                                                                       }).FirstOrDefaultAsync(proj => proj.Id == id));
     }
 }
