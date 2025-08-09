@@ -4,26 +4,25 @@ using Jira.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.Design;
 
 namespace Jira.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/project")]
     [Authorize]
     public class CommentController(AppDbContext appDbContext, UserManager<User> userManager) : ControllerBase
     {
         private AppDbContext AppDbContext { get; set; } = appDbContext;
         private UserManager<User> UserManager { get; set; } = userManager;
 
-        [HttpPost]
-        public async Task<IActionResult> AddCommentToTaskItem([FromBody] AddCommentDto dto)
+        [HttpPost("{projectId}/board/{boardId}/column/{columnId}/task/{taskId}/[controller]")]
+        public async Task<IActionResult> AddCommentToTaskItem([FromRoute] string projectId,
+                                                              [FromRoute] string boardId,
+                                                              [FromRoute] string columnId,
+                                                              [FromRoute] string taskId,
+                                                              [FromBody] AddCommentDto dto)
         {
-            var taskItem = await AppDbContext.TaskItems.Where(task => task.Id == dto.TaskItemId)
-                                                       .Include(task => task.Comments)
-                                                       .ThenInclude(comment => comment.Author)
-                                                       .FirstOrDefaultAsync();
+            var taskItem = await AppDbContext.GetTaskItem(projectId, boardId, columnId, taskId);
 
             if(taskItem == null)
             {
@@ -34,24 +33,35 @@ namespace Jira.Controllers
 
             var comment = new Comment
             {
+                Id = Guid.NewGuid().ToString(),
                 AuthorId = author.Id,
                 CreatedAt = DateTime.UtcNow,
-                TaskItemId = dto.TaskItemId,
+                TaskItemId = taskId,
                 Text = dto.Text,
                 AuthorName = author.UserName
             };
 
             taskItem.Comments.Add(comment);
             await AppDbContext.SaveChangesAsync();
-            return CreatedAtAction(nameof(AddCommentToTaskItem), comment);
+            return CreatedAtAction(nameof(AddCommentToTaskItem), new GetCommentDto
+            {
+                AuthorId = comment.AuthorId,
+                AuthorName = comment.AuthorName,
+                CreatedAt = comment.CreatedAt,
+                UpdatedAt = comment.UpdatedAt,
+                Id = comment.Id,
+                Text = comment.Text
+            });
         }
 
-        [HttpDelete("{taskItemId}/{commentId}")]
-        public async Task<IActionResult> RemoveCommentFromTaskItem([FromRoute] string taskItemId, [FromRoute] string commentId)
+        [HttpDelete("{projectId}/board/{boardId}/column/{columnId}/task/{taskId}/{commentId}")]
+        public async Task<IActionResult> RemoveCommentFromTaskItem([FromRoute] string projectId,
+                                                                   [FromRoute] string boardId,
+                                                                   [FromRoute] string columnId,
+                                                                   [FromRoute] string taskId,
+                                                                   [FromRoute] string commentId)
         {
-            var taskItem = await AppDbContext.TaskItems.Where(task => task.Id == taskItemId)
-                                                       .Include(task => task.Comments)
-                                                       .FirstOrDefaultAsync();
+            var taskItem = await AppDbContext.GetTaskItem(projectId, boardId, columnId, taskId);
 
             if (taskItem == null)
             {
@@ -75,19 +85,22 @@ namespace Jira.Controllers
             return NoContent();
         }
 
-        [HttpPatch]
-        public async Task<IActionResult> EditComment([FromBody] EditCommentDto dto)
+        [HttpPatch("{projectId}/board/{boardId}/column/{columnId}/task/{taskId}/{commentId}")]
+        public async Task<IActionResult> EditComment([FromRoute] string projectId,
+                                                     [FromRoute] string boardId,
+                                                     [FromRoute] string columnId,
+                                                     [FromRoute] string taskId,
+                                                     [FromRoute] string commentId,
+                                                     [FromBody] EditCommentDto dto)
         {
-            var taskItem = await AppDbContext.TaskItems.Where(task => task.Id == dto.TaskItemId)
-                                                       .Include(task => task.Comments)
-                                                       .FirstOrDefaultAsync();
+            var taskItem = await AppDbContext.GetTaskItem(projectId, boardId, columnId, taskId);
 
             if (taskItem == null)
             {
                 return NotFound(new { Error = "Такого TaskItem не существует" });
             }
 
-            var comment = taskItem.Comments.FirstOrDefault(comment => comment.Id == dto.CommentId);
+            var comment = taskItem.Comments.FirstOrDefault(comment => comment.Id == commentId);
 
             if (comment == null)
             {
@@ -106,13 +119,13 @@ namespace Jira.Controllers
             return NoContent();
         }
 
-        [HttpGet("{taskItemId}/comments")]
-        public async Task<IActionResult> GetComments([FromRoute] string taskItemId)
+        [HttpGet("{projectId}/board/{boardId}/column/{columnId}/task/{taskId}/comments")]
+        public async Task<IActionResult> GetComments([FromRoute] string projectId,
+                                                     [FromRoute] string boardId,
+                                                     [FromRoute] string columnId,
+                                                     [FromRoute] string taskId)
         {
-            var taskItem = await AppDbContext.TaskItems.Where(task => task.Id == taskItemId)
-                                                       .Include(task => task.Comments)
-                                                       .ThenInclude(comment => comment.Author)
-                                                       .FirstOrDefaultAsync();
+            var taskItem = await AppDbContext.GetTaskItem(projectId, boardId, columnId, taskId);
 
             if (taskItem == null)
             {
@@ -121,7 +134,7 @@ namespace Jira.Controllers
 
             return Ok(new GetCommentsDto
             {
-                TaskItemId = taskItemId,
+                TaskItemId = taskId,
                 Comments = taskItem.Comments.Select(comment => new GetCommentDto
                 {
                     AuthorId = comment.AuthorId,

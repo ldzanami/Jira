@@ -1,6 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Jira.Models.Entities;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Jira.Models.Entities;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace Jira.Data
 {
@@ -13,7 +14,6 @@ namespace Jira.Data
         public DbSet<Project> Projects {get; set;}
         public DbSet<ProjectMember> ProjectMembers {get; set;}
         public DbSet<TaskItem> TaskItems {get; set;}
-        public DbSet<Tag> Tags {get; set;}
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -38,10 +38,26 @@ namespace Jira.Data
                                       .HasForeignKey(comment => comment.TaskItemId)
                                       .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Entity<TaskItem>().HasMany(task => task.Tags)
-                                      .WithOne(tag => tag.TaskItem)
-                                      .HasForeignKey(tag => tag.TaskItemId)
-                                      .OnDelete(DeleteBehavior.Cascade);
+            builder.Entity<Board>().HasMany(board => board.Columns)
+                                   .WithOne(column => column.Board)
+                                   .HasForeignKey(column => column.BoardId)
+                                   .OnDelete(DeleteBehavior.Cascade);
         }
+
+        public async Task<TaskItem> GetTaskItem(string projectId,
+                                                string boardId,
+                                                string columnId,
+                                                string taskId) => (await Projects.Where(proj => proj.Id == projectId)
+                                                                                 .Include(proj => proj.Boards)
+                                                                                 .ThenInclude(board => board.Columns)
+                                                                                 .ThenInclude(column => column.Tasks)
+                                                                                 .ThenInclude(task => task.Comments)
+                                                                                 .FirstOrDefaultAsync())
+                                                                                 .Boards
+                                                                                 .FirstOrDefault(board => board.Id == boardId)
+                                                                                 .Columns
+                                                                                 .FirstOrDefault(column => column.Id == columnId)
+                                                                                 .Tasks
+                                                                                 .FirstOrDefault(task => task.Id == taskId);
     }
 }

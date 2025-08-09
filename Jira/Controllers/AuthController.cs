@@ -76,12 +76,12 @@ namespace Jira.Controllers
         [Authorize]
         [HttpGet("me")]
         public IActionResult WhoAmI() => Ok(AppDbContext.Users.Where(user => user.UserName == User.Identity.Name)
-                                                                          .Select(user => new
-                                                                          {
-                                                                              user.Id,
-                                                                              user.UserName,
-                                                                              user.Role,
-                                                                          }));
+                                                              .Select(user => new
+                                                              {
+                                                                  user.Id,
+                                                                  user.UserName,
+                                                                  user.Role,
+                                                              }));
 
 
         [HttpPatch("profile")]

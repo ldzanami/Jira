@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Diagnostics.CodeAnalysis;
+using System.Security.Claims;
 
 namespace Jira.Controllers
 {
@@ -147,7 +147,82 @@ namespace Jira.Controllers
             return NoContent();
         }
 
-        [HttpPost("{id}/members")]
+        [HttpPatch("{projectId}/members/{userId}")]
+        public async Task<IActionResult> UpdateMemberRole([FromRoute] string projectId,
+                                                          [FromRoute] string userId,
+                                                          [FromBody] ChangeMemberRoleDto dto)
+        {
+
+            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
+                                                     .Include(proj => proj.ProjectMembers)
+                                                     .ThenInclude(member => member.User)
+                                                     .SingleOrDefaultAsync();
+
+            if (project == null)
+            {
+                return NotFound();
+            }
+
+            var member = project.ProjectMembers.Where(member => member.UserId == userId)
+                                               .SingleOrDefault();
+
+            var me = project.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name)
+                                           .SingleOrDefault();
+
+
+            if (member == null)
+            {
+                return NotFound();
+            }
+
+            if(me.Role != "Admin" && me.Role != "Owner" && me.User.Role != "Admin")
+            {
+                return Forbid();
+            }
+
+            member.Role = dto.Role;
+            await AppDbContext.SaveChangesAsync();
+            return NoContent();
+        }
+
+        [HttpDelete("{projectId}/members/{userId}")]
+        public async Task<IActionResult> DeleteMember([FromRoute] string projectId,
+                                                      [FromRoute] string userId)
+        {
+
+            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
+                                                     .Include(proj => proj.ProjectMembers)
+                                                     .ThenInclude(member => member.User)
+                                                     .SingleOrDefaultAsync();
+
+            if (project == null)
+            {
+                return NotFound();
+            }
+
+            var member = project.ProjectMembers.Where(member => member.UserId == userId)
+                                               .SingleOrDefault();
+
+            var me = project.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name)
+                                           .SingleOrDefault();
+
+
+            if (member == null)
+            {
+                return NotFound();
+            }
+
+            if (me.Role != "Admin" && me.Role != "Owner" && me.User.Role != "Admin")
+            {
+                return Forbid();
+            }
+
+            project.ProjectMembers.Remove(member);
+            await AppDbContext.SaveChangesAsync();
+            return NoContent();
+        }
+
+            [HttpPost("{id}/members")]
         public async Task<IActionResult> AddProjectMember([FromRoute] string id, [FromBody] AddMemberDto dto)
         {
             if ((await AppDbContext.Projects.FindAsync(id)) == null)
