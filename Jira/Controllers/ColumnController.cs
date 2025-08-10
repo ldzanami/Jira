@@ -1,8 +1,8 @@
 ﻿using Jira.Data;
 using Jira.DTOs.Column;
+using Jira.Infrastructure;
 using Jira.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,49 +15,30 @@ namespace Jira.Controllers
     {
         private AppDbContext AppDbContext { get; set; } = appDbContext;
 
+
         [HttpPost("{projectId}/board/{boardId}/columns")]
         public async Task<IActionResult> CreateColumn([FromRoute] string projectId,
                                                       [FromRoute] string boardId,
                                                       [FromBody] CreateColumnDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
+                return Forbid();
             }
-            if(board.Columns.OrderBy(column => column.Position).Last() != null)
-            {
-                if (dto.Position < board.Columns.OrderBy(column => column.Position).Last().Position)
-                {
-                    var columnFromPosition = board.Columns.FirstOrDefault(column => column.Position == dto.Position);
 
-                    if (columnFromPosition != null)
-                    {
-                        foreach (var i in board.Columns.Where(column => column.Position >= dto.Position))
-                        {
-                            i.Position++;
-                        }
-                    }
-                }
-                else
-                {
-                    dto.Position = board.Columns.OrderBy(column => column.Position).Last().Position + 1;
-                }
-            }
-            else
+            var board = AppDbContext.Boards.Include(board => board.Columns)
+                                           .FirstOrDefault(board => board.Id == boardId);
+
+            if (board.Columns.Count > 15)
             {
-                dto.Position = 0;
+                return BadRequest(new { Error = "Максимальное число колонн = 15" });
             }
 
             var column = new Column
@@ -68,7 +49,19 @@ namespace Jira.Controllers
                 Position = dto.Position
             };
 
-            board.Columns.Add(column);
+            Console.WriteLine(column.Position);
+            Console.WriteLine(board.Columns.Count);
+
+            if (column.Position < board.Columns.Count)
+            {
+                board.Columns.Insert(column.Position, column);
+            }
+            else
+            {
+                board.Columns.Add(column);
+            }
+
+            board.Columns = RepositionColumns(board.Columns);
             await AppDbContext.SaveChangesAsync();
             return CreatedAtAction(nameof(CreateColumn), new GetColumnDto
             {
@@ -78,26 +71,25 @@ namespace Jira.Controllers
             });
         }
 
+
         [HttpGet("{projectId}/board/{boardId}/columns")]
         public async Task<IActionResult> GetAllColumnsInBoard([FromRoute] string projectId,
                                                               [FromRoute] string boardId)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
+                return Forbid();
             }
+
+            var board = AppDbContext.Boards.Include(board => board.Columns)
+                                           .FirstOrDefault(board => board.Id == boardId);
 
             return Ok(new GetColumnsDto
             {
@@ -112,118 +104,103 @@ namespace Jira.Controllers
             });
         }
 
+
         [HttpPatch("{projectId}/board/{boardId}/columns/{columnId}")]
         public async Task<IActionResult> UpdateColumn([FromRoute] string projectId,
                                                       [FromRoute] string boardId,
                                                       [FromRoute] string columnId,
                                                       [FromBody] UpdateColumnDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId], columnIds: [columnId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
+            if(!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
+                return Forbid();
             }
+
+            var board = await AppDbContext.Boards.Include(board => board.Columns)
+                                                 .FirstOrDefaultAsync(board => board.Id == boardId);
 
             var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
 
-            if(column == null)
+            if (dto.Position != -1)
             {
-                return NotFound();
+                column.Position = dto.Position;
             }
-            if (board.Columns.OrderBy(column => column.Position).Last() != null)
-            {
-                if (dto.Position < board.Columns.OrderBy(column => column.Position).Last().Position)
-                {
-                    var columnFromPosition = board.Columns.FirstOrDefault(column => column.Position == dto.Position);
 
-                    if (columnFromPosition != null)
-                    {
-                        if (dto.Position < column.Position)
-                        {
-                            foreach (var i in board.Columns.Where(c => c.Position >= dto.Position && c.Position < column.Position))
-                            {
-                                i.Position++;
-                            }
-                        }
-                        else if (dto.Position > column.Position)
-                        {
-                            foreach (var i in board.Columns.Where(c => c.Position <= dto.Position && c.Position > column.Position))
-                            {
-                                i.Position--;
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    dto.Position = board.Columns.OrderBy(column => column.Position).Last().Position + 1;
-                }
+            if (dto.Name != null)
+            {
+                column.Name = dto.Name;
+            }
+
+            if (dto.Position > 15)
+            {
+                dto.Position = 16;
+            }
+
+            board.Columns.Remove(column);
+
+            if (column.Position < board.Columns.Count)
+            {
+                board.Columns.Insert(column.Position, column);
             }
             else
             {
-                dto.Position = 0;
+                board.Columns.Add(column);
             }
-            
 
-            column.Position = dto.Position;
-            column.Name = dto.Name;
+            board.Columns = RepositionColumns(board.Columns);
             await AppDbContext.SaveChangesAsync();
             return NoContent();
         }
+
 
         [HttpDelete("{projectId}/board/{boardId}/columns/{columnId}")]
         public async Task<IActionResult> DeleteColumn([FromRoute] string projectId,
                                                       [FromRoute] string boardId,
                                                       [FromRoute] string columnId)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .Include(proj => proj.ProjectMembers)
-                                                     .ThenInclude(member => member.User)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, columnIds: [columnId], boardIds: [boardId]);
 
-            if (project == null)
+            if(check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
-            {
-                return NotFound();
-            }
-
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if (column == null)
-            {
-                return NotFound();
-            }
-
-            var me = project.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name)
-                                           .SingleOrDefault();
-
-            if (me.Role != "Admin" && me.Role != "Owner" && me.User.Role != "Admin")
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.OwnerAndManagers))
             {
                 return Forbid();
             }
 
+            var board = AppDbContext.Boards.Include(board => board.Columns)
+                                           .FirstOrDefault(board => board.Id == boardId);
+
+            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
+
             board.Columns.Remove(column);
+            board.Columns = RepositionColumns(board.Columns);
             await AppDbContext.SaveChangesAsync();
             return NoContent();
         }
+
+
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public List<Column> RepositionColumns(List<Column> columns)
+        {
+            columns = CompressList(columns);
+            for(int i = 0; i < columns.Count; i++)
+            {
+                columns[i].Position = i;
+            }
+            return columns;
+        }
+
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public List<Column> CompressList(List<Column> columns) => columns.FindAll(column => column != null).ToList();
     }
 }

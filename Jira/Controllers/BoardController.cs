@@ -1,10 +1,12 @@
 ﻿using Jira.Data;
 using Jira.DTOs.Board;
+using Jira.Infrastructure;
 using Jira.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace Jira.Controllers
 {
@@ -18,18 +20,27 @@ namespace Jira.Controllers
         [HttpPost("{projectId}/boards")]
         public async Task<IActionResult> CreateBoard([FromRoute] string projectId, [FromBody] CreateBoardDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId);
 
-            if(project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = new Board() { Id = Guid.NewGuid().ToString(), CreatedAt = DateTime.UtcNow, Name = dto.Name, ProjectId = project.Id };
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
+            {
+                return Forbid();
+            }
 
-            project.Boards.Add(board);
+            var board = new Board()
+            {
+                Id = Guid.NewGuid().ToString(),
+                CreatedAt = DateTime.UtcNow,
+                Name = dto.Name,
+                ProjectId = projectId
+            };
+
+            await AppDbContext.Boards.AddAsync(board);
 
             await AppDbContext.SaveChangesAsync();
 
@@ -44,12 +55,16 @@ namespace Jira.Controllers
         [HttpGet("{projectId}/boards")]
         public async Task<IActionResult> GetAllBoards([FromRoute] string projectId)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .SingleOrDefaultAsync();
-            
-            if(project == null)
+            var check = await AppDbContext.CheckForNull(projectId: projectId);
+
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
+            }
+
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
+            {
+                return Forbid();
             }
 
             return Ok(AppDbContext.Projects.Where(proj => proj.Id == projectId)
@@ -71,25 +86,30 @@ namespace Jira.Controllers
                                                      [FromRoute] string projectId,
                                                      [FromBody] UpdateBoardDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId]);
 
-            if(project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.Where(board => board.Id == boardId)
-                                      .SingleOrDefault();
-
-            if(board == null)
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
+                return Forbid();
             }
 
-            board.Name = dto.Name;
-            board.UpdatedAt = DateTime.UtcNow;
+            var board = await AppDbContext.Boards.FirstOrDefaultAsync(board => board.Id == boardId);
+
+            if (dto.Name != null)
+            {
+                board.Name = dto.Name;
+                board.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                return BadRequest();
+            }
+
             await AppDbContext.SaveChangesAsync();
             return NoContent();
         }
@@ -98,31 +118,21 @@ namespace Jira.Controllers
         public async Task<IActionResult> DeleteBoard([FromRoute] string boardId,
                                                      [FromRoute] string projectId)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Owner)
-                                                     .Include(proj => proj.Boards)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.Where(board => board.Id == boardId)
-                                      .SingleOrDefault();
-
-            if (board == null)
-            {
-                return NotFound();
-            }
-
-            if (!(User.Claims.Where(claim => claim.Type == ClaimTypes.Role).SingleOrDefault().Value == "Admin")
-              && !(project.Owner.UserName == User.Identity.Name))
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.OwnerAndManagers))
             {
                 return Forbid();
             }
 
-            project.Boards.Remove(board);
+            var board = await AppDbContext.Boards.FirstOrDefaultAsync(board => board.Id == boardId);
+
+            AppDbContext.Boards.Remove(board);
             await AppDbContext.SaveChangesAsync();
             return NoContent();
         }

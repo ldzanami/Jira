@@ -8,6 +8,6 @@
         public required DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; }
         public Project? Project { get; set; }
-        public List<Column> Columns { get; set; } = [];
+        public List<Column> Columns { get; set; } = new(20);
     }
 }

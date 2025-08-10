@@ -24,7 +24,6 @@
     <Folder Include="Migrations\" />
     <Folder Include="Models\Queriers\" />
     <Folder Include="Repositories\" />
-    <Folder Include="Infrastructure\" />
   </ItemGroup>
 
 </Project>

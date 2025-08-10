@@ -1,5 +1,6 @@
 ﻿using Jira.Data;
 using Jira.DTOs.TaskItem;
+using Jira.Infrastructure;
 using Jira.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,29 +21,16 @@ namespace Jira.Controllers
                                                     [FromRoute] string columnId,
                                                     [FromBody] CreateTaskDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .ThenInclude(column => column.Tasks)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if(board == null)
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
-            }
-
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if(column == null)
-            {
-                return NotFound();
+                return Forbid();
             }
 
             var task = new TaskItem
@@ -58,7 +46,7 @@ namespace Jira.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            column.Tasks.Add(task);
+            await AppDbContext.TaskItems.AddAsync(task);
             await AppDbContext.SaveChangesAsync();
             return CreatedAtAction(nameof(CreateTask), new GetTaskDto
             {
@@ -80,30 +68,20 @@ namespace Jira.Controllers
                                                           [FromRoute] string boardId,
                                                           [FromRoute] string columnId)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .ThenInclude(column => column.Tasks)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId], columnIds: [columnId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
+                return Forbid();
             }
 
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if (column == null)
-            {
-                return NotFound();
-            }
+            var column = await AppDbContext.Columns.Include(column => column.Tasks)
+                                                   .FirstOrDefaultAsync(column => column.Id == columnId);
 
             return Ok(new GetTasksDto
             {
@@ -131,54 +109,44 @@ namespace Jira.Controllers
                                                     [FromRoute] string taskId,
                                                     [FromBody] UpdateTaskDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .ThenInclude(column => column.Tasks)
-                                                     .Include(proj => proj.ProjectMembers)
-                                                     .ThenInclude(member => member.User)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId], columnIds: [columnId], taskIds: [taskId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
-            {
-                return NotFound();
-            }
-
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if (column == null)
-            {
-                return NotFound();
-            }
-
-            var task = column.Tasks.FirstOrDefault(task => task.Id == taskId);
-
-            if(task == null)
-            {
-                return NotFound();
-            }
-
-            var me = project.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name)
-                                           .SingleOrDefault();
-
-            if (me.Role != "Admin" && me.Role != "Owner" && me.User.Role != "Admin")
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
                 return Forbid();
             }
 
-            task.Title = dto.Title;
-            task.Description = dto.Description;
-            task.Status = dto.Status;
-            task.Priority = dto.Priority;
-            task.DueDate = dto.DueDate;
-            task.Tags = dto.Tags;
+            var task = await AppDbContext.TaskItems.FirstOrDefaultAsync(task => task.Id == taskId);
+
+            if (dto.Title != null)
+            {
+                task.Title = dto.Title;
+            }
+            if(dto.Description != null)
+            {
+                task.Description = dto.Description;
+            }
+            if (dto.Status != null)
+            {
+                task.Status = dto.Status;
+            }
+            if (dto.Priority != null)
+            {
+                task.Priority = dto.Priority;
+            }
+            if (dto.DueDate != null)
+            {
+                task.DueDate = dto.DueDate;
+            }
+            if (dto.Tags != null)
+            {
+                task.Tags = dto.Tags;
+            }
             task.UpdatedAt = DateTime.UtcNow;
 
             await AppDbContext.SaveChangesAsync();
@@ -191,49 +159,21 @@ namespace Jira.Controllers
                                                     [FromRoute] string columnId,
                                                     [FromRoute] string taskId)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .ThenInclude(column => column.Tasks)
-                                                     .Include(proj => proj.ProjectMembers)
-                                                     .ThenInclude(member => member.User)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId], columnIds: [columnId], taskIds: [taskId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
-            {
-                return NotFound();
-            }
-
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if (column == null)
-            {
-                return NotFound();
-            }
-
-            var task = column.Tasks.FirstOrDefault(task => task.Id == taskId);
-
-            if (task == null)
-            {
-                return NotFound();
-            }
-
-            var me = project.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name)
-                                           .SingleOrDefault();
-
-            if (me.Role != "Admin" && me.Role != "Owner" && me.User.Role != "Admin")
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.OwnerAndManagers))
             {
                 return Forbid();
             }
 
-            column.Tasks.Remove(task);
+            var task = AppDbContext.TaskItems.FirstOrDefault(task => task.Id == taskId);
+
+            AppDbContext.TaskItems.Remove(task);
             await AppDbContext.SaveChangesAsync();
             return NoContent();
         }
@@ -245,54 +185,19 @@ namespace Jira.Controllers
                                                                    [FromRoute] string taskId,
                                                                    [FromBody] MoveTaskDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .ThenInclude(column => column.Tasks)
-                                                     .Include(proj => proj.ProjectMembers)
-                                                     .ThenInclude(member => member.User)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId, boardIds: [boardId], columnIds: [columnId, dto.NewColumnid], taskIds: [taskId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
-            {
-                return NotFound();
-            }
-
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if (column == null)
-            {
-                return NotFound();
-            }
-
-            var task = column.Tasks.FirstOrDefault(task => task.Id == taskId);
-
-            if (task == null)
-            {
-                return NotFound();
-            }
-
-            var newColumn = board.Columns.FirstOrDefault(column => column.Id == dto.NewColumnid);
-
-            if(newColumn == null)
-            {
-                return NotFound();
-            }
-
-            var me = project.ProjectMembers.Where(member => member.User.UserName == User.Identity.Name)
-                                           .SingleOrDefault();
-
-            if (me.Role != "Admin" && me.Role != "Owner" && me.User.Role != "Admin")
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.OwnerAndManagers))
             {
                 return Forbid();
             }
+
+            var task = AppDbContext.TaskItems.FirstOrDefault(task => task.Id == taskId);
 
             task.ColumnId = dto.NewColumnid;
             await AppDbContext.SaveChangesAsync();
@@ -306,45 +211,24 @@ namespace Jira.Controllers
                                                     [FromRoute] string taskId,
                                                     [FromBody] AssignTaskDto dto)
         {
-            var project = await AppDbContext.Projects.Where(proj => proj.Id == projectId)
-                                                     .Include(proj => proj.ProjectMembers)
-                                                     .Include(proj => proj.Boards)
-                                                     .ThenInclude(board => board.Columns)
-                                                     .ThenInclude(column => column.Tasks)
-                                                     .SingleOrDefaultAsync();
+            var check = await AppDbContext.CheckForNull(projectId: projectId,
+                                                        boardIds: [boardId],
+                                                        columnIds: [columnId],
+                                                        taskIds: [taskId],
+                                                        userIds: [dto.AssignedId],
+                                                        memberIds: [dto.AssignedId]);
 
-            if (project == null)
+            if (check != null)
             {
-                return NotFound();
+                return NotFound(check);
             }
 
-            var board = project.Boards.FirstOrDefault(board => board.Id == boardId);
-
-            if (board == null)
+            if (!await AppDbContext.IsRequiredOrAdmin(projectId, User, Constants.AllMembers))
             {
-                return NotFound();
+                return Forbid();
             }
 
-            var column = board.Columns.FirstOrDefault(column => column.Id == columnId);
-
-            if (column == null)
-            {
-                return NotFound();
-            }
-
-            var task = column.Tasks.FirstOrDefault(task => task.Id == taskId);
-
-            if (task == null)
-            {
-                return NotFound();
-            }
-
-            var assign = project.ProjectMembers.FirstOrDefault(member => member.UserId == dto.AssignedId);
-
-            if(assign == null)
-            {
-                return NotFound();
-            }
+            var task = AppDbContext.TaskItems.FirstOrDefault(task => task.Id == taskId);
 
             task.AssignedId = dto.AssignedId;
             await AppDbContext.SaveChangesAsync();

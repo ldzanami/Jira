@@ -1,7 +1,8 @@
-﻿using Jira.Models.Entities;
+﻿using Jira.Infrastructure;
+using Jira.Models.Entities;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using System.Threading.Tasks;
+using System.Security.Claims;
 
 namespace Jira.Data
 {
@@ -44,20 +45,112 @@ namespace Jira.Data
                                    .OnDelete(DeleteBehavior.Cascade);
         }
 
-        public async Task<TaskItem> GetTaskItem(string projectId,
-                                                string boardId,
-                                                string columnId,
-                                                string taskId) => (await Projects.Where(proj => proj.Id == projectId)
-                                                                                 .Include(proj => proj.Boards)
-                                                                                 .ThenInclude(board => board.Columns)
-                                                                                 .ThenInclude(column => column.Tasks)
-                                                                                 .ThenInclude(task => task.Comments)
-                                                                                 .FirstOrDefaultAsync())
-                                                                                 .Boards
-                                                                                 .FirstOrDefault(board => board.Id == boardId)
-                                                                                 .Columns
-                                                                                 .FirstOrDefault(column => column.Id == columnId)
-                                                                                 .Tasks
-                                                                                 .FirstOrDefault(task => task.Id == taskId);
+        public async Task<object> CheckForNull(string[]? userIds = null,
+                                               string[]? memberIds = null,
+                                               string? projectId = null,
+                                               string[]? boardIds = null,
+                                               string[]? columnIds = null,
+                                               string[]? taskIds = null,
+                                               string[]? commentIds = null)
+        {
+            if(userIds != null)
+            {
+                foreach (var userId in userIds)
+                {
+                    var user = await Users.Where(user => user.Id == userId).FirstOrDefaultAsync();
+                    if (user == null)
+                    {
+                        return Constants.ErrorBuilder(Constants.UserNotFoundError, userId);
+                    }
+                }
+            }
+
+            if (memberIds != null && projectId != null)
+            {
+                foreach(var memberId in memberIds)
+                {
+                    var member = await ProjectMembers.Where(member => member.UserId == memberId && member.ProjectId == projectId).FirstOrDefaultAsync();
+                    if (member == null)
+                    {
+                        return Constants.ErrorBuilder(Constants.ProjectMemberNotFoundError, memberId);
+                    }
+                }
+            }
+
+            if (projectId != null)
+            {
+                var project = await Projects.Where(proj => proj.Id == projectId).FirstOrDefaultAsync();
+                if (project == null)
+                {
+                    return Constants.ErrorBuilder(Constants.ProjectNotFoundError, projectId);
+                }
+            }
+
+            if(taskIds != null)
+            {
+                foreach (var taskId in taskIds)
+                {
+                    var task = await TaskItems.Where(task => task.Id == taskId).FirstOrDefaultAsync();
+                    if (task == null)
+                    {
+                        return Constants.ErrorBuilder(Constants.TaskItemNotFoundError, taskId);
+                    }
+                }    
+            }
+
+            if (boardIds != null)
+            {
+                foreach (var boardId in boardIds)
+                {
+                    var board = await Boards.Where(board => board.Id == boardId).FirstOrDefaultAsync();
+                    if (board == null)
+                    {
+                        return Constants.ErrorBuilder(Constants.BoardNotFoundError, boardId);
+                    }
+                }
+            }
+
+            if (columnIds != null)
+            {
+                foreach (var columnId in columnIds)
+                {
+                    var column = await Columns.Where(column => column.Id == columnId).FirstOrDefaultAsync();
+                    if (column == null)
+                    {
+                        return Constants.ErrorBuilder(Constants.ColumnNotFoundError, columnId);
+                    }
+                }
+            }
+
+            if (commentIds != null)
+            {
+                foreach (var commentId in commentIds)
+                {
+                    var comment = await Comments.Where(comment => comment.Id == commentId).FirstOrDefaultAsync();
+                    if (comment == null)
+                    {
+                        return Constants.ErrorBuilder(Constants.CommentNotFoundError, commentId);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        public async Task<bool> IsMember(string projectId,
+                                         string userId,
+                                         string[] requiredRoles) => await ProjectMembers.Where(member => member.UserId == userId && member.ProjectId == projectId)
+                                                                                        .AnyAsync(member => requiredRoles.Contains(member.Role));
+
+        public async Task<bool> IsRequiredOrAdmin(string projectId, ClaimsPrincipal User, string[] requiredRoles)
+        {
+            var isMember = await IsMember(projectId,
+                                          User.Claims.SingleOrDefault(claim => claim.Type == ClaimTypes.Sid).Value,
+                                          requiredRoles);
+
+            var meUser = await Users.Where(user => user.UserName == User.Identity.Name).FirstOrDefaultAsync();
+
+            return meUser.Role == "Admin" || isMember;
+        }
     }
 }

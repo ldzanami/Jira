@@ -52,7 +52,8 @@ namespace Jira.Controllers
             var userClaims = await UserManager.GetClaimsAsync(user);
             var claims = new List<Claim>
             {
-                new(ClaimTypes.Role, user.Role)
+                new(ClaimTypes.Role, user.Role),
+                new(ClaimTypes.Sid, user.Id)
             }.Union(userClaims);
             var jwtSettings = Configuration.GetSection("Jwt");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]));
